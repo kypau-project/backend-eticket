@@ -1,6 +1,6 @@
 FROM php:8.4-cli
 
-# Install system dependencies
+# Install system dependencies + Node.js
 RUN apt-get update && apt-get install -y \
     git \
     curl \
@@ -9,6 +9,8 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     zip \
     unzip \
+    nodejs \
+    npm \
     && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd xml \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -22,8 +24,17 @@ WORKDIR /app
 # Copy composer files first for better Docker layer caching
 COPY composer.json composer.lock ./
 
-# Install dependencies (no dev)
+# Install PHP dependencies (no dev)
 RUN composer install --no-dev --optimize-autoloader --no-scripts --no-interaction
+
+# Copy package.json for npm install
+COPY package.json ./
+
+# Install Node dependencies and build Vite assets
+RUN npm install
+COPY vite.config.js ./
+COPY resources ./resources
+RUN npm run build
 
 # Copy the rest of the application
 COPY . .
@@ -46,5 +57,5 @@ RUN mkdir -p storage/logs \
 # Expose port (Railway sets PORT env var)
 EXPOSE ${PORT:-8080}
 
-# Start command: run migrations then serve
-CMD php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=${PORT:-8080}
+# Start command: run migrations, seed database, then serve
+CMD php artisan migrate --force && php artisan db:seed --force && php artisan serve --host=0.0.0.0 --port=${PORT:-8080}
